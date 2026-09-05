@@ -108,6 +108,9 @@ With the OpenAPI schema enabled it compares the full route set. With the schema 
 it polls the configured `healthcheck` path. With neither it only confirms the container
 stays up, and says so, because a weaker check should never be mistaken for the strong one.
 
+A build that fails verification removes its image tag, so the next `pyhusk build` retries
+rather than seeing a matching hash and reporting the broken image as unchanged.
+
 ## Known limits
 
 Read these before trusting an image.

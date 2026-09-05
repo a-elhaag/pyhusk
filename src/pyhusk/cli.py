@@ -340,6 +340,15 @@ def build(
                     fg=typer.colors.RED,
                     err=True,
                 )
+                # The image is already stamped with this content's hash. Left in
+                # place, the next build would compare hashes, see a match, and
+                # report "unchanged" - a broken image would never be retried.
+                run_docker(["rmi", "-f", resolution.tag])
+                typer.secho(
+                    f"{name}: removed {resolution.tag}; the next build will retry",
+                    fg=typer.colors.RED,
+                    err=True,
+                )
                 failures.append(name)
                 continue
             if outcome.tier != "schema":

@@ -135,3 +135,25 @@ def test_count_python_files_ignores_the_venv_and_build_dirs(demo_repo):
     (demo_repo / ".build" / "a" / "copy.py").write_text("")
     assert count_python_files(demo_repo) == real
     assert real == 10
+
+
+@pytest.mark.docker
+@needs_docker
+def test_failed_verification_does_not_poison_staleness(docker_repo):
+    # A module-scope dynamic import: the probe survives it, the static walk
+    # cannot see it, the image lacks the file, the container dies on startup.
+    (docker_repo / "services/a/main.py").write_text(
+        "import importlib\n"
+        "from fastapi import FastAPI\n"
+        "importlib.import_module('common.unused')\n"
+        "app = FastAPI()\n"
+    )
+    first = runner.invoke(app, ["build", "a", "--repo", str(docker_repo)])
+    assert first.exit_code != 0
+    assert "verification failed" in first.output
+
+    # Without the untag, this second run would see a matching label and report
+    # "unchanged", and the broken image would never be rebuilt.
+    second = runner.invoke(app, ["build", "a", "--repo", str(docker_repo)])
+    assert "unchanged" not in second.output
+    assert "building" in second.output
