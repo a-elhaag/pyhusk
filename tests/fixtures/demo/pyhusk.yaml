@@ -1,0 +1,7 @@
+services:
+  a:
+    entry: services/a/main.py
+    app: app
+  b:
+    entry: services/b/main.py
+    app: app
