@@ -77,8 +77,13 @@ def resolve(
             f"to start, add it to the target repository's dependencies"
         )
 
-    base = resolve_base(service.base_image)
-    if not base.verified:
+    base = resolve_base(service.base_image, cache=repo_root / ".build" / "_digests.json")
+    if base.source == "stale-cache":
+        warnings.append(
+            f"registry unreachable; using the last known digest for {service.base_image}. "
+            f"An upstream update will not be noticed until the registry answers again"
+        )
+    elif not base.verified:
         warnings.append(
             f"could not resolve a digest for {service.base_image}; base image freshness "
             f"is unverified, so an upstream update will not trigger a rebuild"

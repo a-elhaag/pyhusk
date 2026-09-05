@@ -14,7 +14,7 @@ def repo(demo_repo, venv_in, monkeypatch):
 
     monkeypatch.setattr(
         "pyhusk.pipeline.resolve_base",
-        lambda ref: BaseRef(reference=ref, digest="sha256:test", verified=True),
+        lambda ref, **_: BaseRef(reference=ref, digest="sha256:test", verified=True),
     )
     return venv_in(demo_repo)
 
@@ -123,3 +123,15 @@ def test_editing_a_shared_module_restales_only_its_dependents(docker_repo):
     lines = {line.split("\t")[0]: line.split("\t")[1] for line in result.output.strip().splitlines()}
     assert lines["b"] == "stale"
     assert lines["a"] == "unchanged"
+
+
+def test_count_python_files_ignores_the_venv_and_build_dirs(demo_repo):
+    from pyhusk.report import count_python_files
+
+    real = count_python_files(demo_repo)
+    (demo_repo / ".venv" / "lib").mkdir(parents=True)
+    (demo_repo / ".venv" / "lib" / "site.py").write_text("")
+    (demo_repo / ".build" / "a").mkdir(parents=True, exist_ok=True)
+    (demo_repo / ".build" / "a" / "copy.py").write_text("")
+    assert count_python_files(demo_repo) == real
+    assert real == 10

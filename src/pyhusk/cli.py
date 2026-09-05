@@ -20,7 +20,7 @@ from pyhusk.docker import image_exists, image_size, require_docker, run_docker
 from pyhusk.dockerize import assemble_context, render_base_dockerfile, render_dockerfile
 from pyhusk.errors import PyhuskError
 from pyhusk.pipeline import Resolution, is_stale, resolve
-from pyhusk.report import human_size
+from pyhusk.report import count_python_files, human_size
 from pyhusk.staleness import SLICE_LABEL
 from pyhusk.verify import verify
 
@@ -237,8 +237,8 @@ def _compare_against_naive(repo: Path, resolution: Resolution) -> None:
         return
     saved = naive - pruned
     typer.echo(
-        f"{resolution.name}: pruned {human_size(pruned)} vs naive {human_size(naive)}  "
-        f"saved {human_size(saved)} ({saved / naive:.0%})"
+        f"{resolution.name}: pruned {human_size(pruned)} vs naive {human_size(naive)} "
+        f"compressed  saved {human_size(saved)} ({saved / naive:.0%})"
     )
 
 
@@ -310,7 +310,7 @@ def build(
 
     _build_bases(repo, pending)
 
-    total_repo_files = sum(1 for _ in repo.rglob("*.py"))
+    total_repo_files = count_python_files(repo)
     failures: list[str] = []
     for name, resolution in sorted(pending.items()):
         typer.echo(f"{name}: building")
@@ -356,7 +356,7 @@ def build(
             f"{name}: built {resolution.tag}  "
             f"{len(resolution.files)}/{total_repo_files} files  "
             f"{len(resolution.requirements.pins)} packages  "
-            f"{human_size(image_size(resolution.tag))}"
+            f"{human_size(image_size(resolution.tag))} compressed"
         )
         if compare:
             _compare_against_naive(repo, resolution)

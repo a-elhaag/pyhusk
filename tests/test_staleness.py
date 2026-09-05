@@ -73,3 +73,99 @@ def test_base_hash_collapses_identical_requirements_on_one_base():
 
 def test_base_hash_changes_with_requirements():
     assert base_hash(BASE, "a==1\n") != base_hash(BASE, "a==2\n")
+
+
+def _failing_docker(monkeypatch):
+    import subprocess
+
+    from pyhusk import staleness
+
+    monkeypatch.setattr(staleness, "_MEMO", {})
+    monkeypatch.setattr(
+        staleness,
+        "run_docker",
+        lambda args, **kw: subprocess.CompletedProcess(args, 1, "", "429 Too Many Requests"),
+    )
+
+
+def _succeeding_docker(monkeypatch, digest):
+    import subprocess
+
+    from pyhusk import staleness
+
+    monkeypatch.setattr(staleness, "_MEMO", {})
+    monkeypatch.setattr(
+        staleness,
+        "run_docker",
+        lambda args, **kw: subprocess.CompletedProcess(args, 0, digest + "\n", ""),
+    )
+
+
+def test_resolve_base_writes_the_cache_on_success(tmp_path, monkeypatch):
+    from pyhusk.staleness import resolve_base
+
+    _succeeding_docker(monkeypatch, "sha256:abc")
+    cache = tmp_path / "_digests.json"
+    result = resolve_base("python:3.12-slim", cache=cache)
+    assert result.digest == "sha256:abc"
+    assert result.source == "registry"
+    assert cache.exists()
+
+
+def test_resolve_base_skips_the_registry_while_the_cache_is_fresh(tmp_path, monkeypatch):
+    from pyhusk.staleness import resolve_base
+
+    cache = tmp_path / "_digests.json"
+    _succeeding_docker(monkeypatch, "sha256:first")
+    resolve_base("python:3.12-slim", cache=cache)
+
+    # The registry now answers differently, but the fresh cache wins, which is
+    # what keeps a dev loop under the rate limit.
+    _succeeding_docker(monkeypatch, "sha256:second")
+    result = resolve_base("python:3.12-slim", cache=cache)
+    assert result.digest == "sha256:first"
+    assert result.source == "cache"
+
+
+def test_resolve_base_falls_back_to_a_stale_cache_when_the_registry_fails(tmp_path, monkeypatch):
+    import json
+    import time
+
+    from pyhusk.staleness import DIGEST_TTL_SECONDS, resolve_base
+
+    cache = tmp_path / "_digests.json"
+    cache.write_text(json.dumps({
+        "python:3.12-slim": {"digest": "sha256:old", "at": time.time() - 2 * DIGEST_TTL_SECONDS}
+    }))
+    _failing_docker(monkeypatch)
+    result = resolve_base("python:3.12-slim", cache=cache)
+    # A registry blip must not change the hash and restale every service.
+    assert result.digest == "sha256:old"
+    assert result.verified is True
+    assert result.source == "stale-cache"
+
+
+def test_resolve_base_with_nothing_available_is_loud(tmp_path, monkeypatch):
+    from pyhusk.staleness import resolve_base
+
+    _failing_docker(monkeypatch)
+    result = resolve_base("python:3.12-slim", cache=tmp_path / "_digests.json")
+    assert result.verified is False
+    assert result.source == "tag"
+    assert result.digest == "python:3.12-slim"
+
+
+def test_resolve_base_survives_a_docker_timeout(tmp_path, monkeypatch):
+    import subprocess
+
+    from pyhusk import staleness
+    from pyhusk.staleness import resolve_base
+
+    monkeypatch.setattr(staleness, "_MEMO", {})
+
+    def hang(args, **kw):
+        raise subprocess.TimeoutExpired(args, kw.get("timeout", 0))
+
+    monkeypatch.setattr(staleness, "run_docker", hang)
+    result = resolve_base("python:3.12-slim", cache=tmp_path / "_digests.json")
+    assert result.source == "tag"

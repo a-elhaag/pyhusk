@@ -12,7 +12,7 @@ def resolved(demo_repo, venv_in, monkeypatch):
     # No Docker daemon in unit tests: pin the base resolution.
     monkeypatch.setattr(
         "pyhusk.pipeline.resolve_base",
-        lambda ref: BaseRef(reference=ref, digest="sha256:test", verified=True),
+        lambda ref, **_: BaseRef(reference=ref, digest="sha256:test", verified=True),
     )
     return repo, load_config(repo)
 
@@ -126,7 +126,7 @@ def test_unverified_base_produces_a_warning(demo_repo, venv_in, monkeypatch):
     repo = venv_in(demo_repo)
     monkeypatch.setattr(
         "pyhusk.pipeline.resolve_base",
-        lambda ref: BaseRef(reference=ref, digest=ref, verified=False),
+        lambda ref, **_: BaseRef(reference=ref, digest=ref, verified=False),
     )
     result = resolve(repo, "a", load_config(repo).services["a"])
     assert any("freshness" in warning or "digest" in warning for warning in result.warnings)

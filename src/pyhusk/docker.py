@@ -38,7 +38,13 @@ def image_exists(tag: str) -> bool:
 
 
 def image_size(tag: str) -> int:
-    """Image size in bytes, or 0 when the image is absent."""
+    """Compressed image size in bytes, or 0 when the image is absent.
+
+    With the containerd image store, `inspect .Size` reports compressed content
+    size, while `docker images` shows the unpacked size, roughly 4-5x larger.
+    Both pruned and naive images are measured the same way, so the delta is
+    honest; the label in the CLI output says which measure this is.
+    """
     completed = run_docker(["image", "inspect", tag, "--format", "{{.Size}}"])
     if completed.returncode != 0:
         return 0

@@ -14,7 +14,7 @@ def repo(demo_repo, venv_in, monkeypatch):
 
     monkeypatch.setattr(
         "pyhusk.pipeline.resolve_base",
-        lambda ref: BaseRef(reference=ref, digest="sha256:test", verified=True),
+        lambda ref, **_: BaseRef(reference=ref, digest="sha256:test", verified=True),
     )
     # No daemon assumed in unit tests, so nothing is ever built and everything is stale.
     monkeypatch.setattr("pyhusk.pipeline.read_slice_label", lambda tag: None)

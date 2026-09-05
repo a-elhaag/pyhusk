@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import functools
 import hashlib
 import json
+import subprocess
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,12 +12,22 @@ from pyhusk.docker import run_docker
 
 SLICE_LABEL = "org.pyhusk.slice"
 
+# How long a cached base digest is trusted before the registry is asked again.
+# Every plan and build used to query the registry per base image, which burns
+# Docker Hub's anonymous quota (HTTP 429) in a busy dev loop or CI. One query
+# per hour per base is plenty: base tags move on the order of days.
+DIGEST_TTL_SECONDS = 3600
+
+_MEMO: dict[str, "BaseRef"] = {}
+
 
 @dataclass(frozen=True)
 class BaseRef:
     reference: str
     digest: str
     verified: bool
+    # Where the digest came from: "registry", "local", "cache", or "tag".
+    source: str = "registry"
 
     @property
     def pinned(self) -> str:
@@ -26,8 +37,40 @@ class BaseRef:
         return self.reference
 
 
-@functools.lru_cache(maxsize=None)
-def resolve_base(reference: str) -> BaseRef:
+def _docker_stdout(args: list[str], timeout: int) -> str | None:
+    """stdout of a docker command, or None on failure or timeout."""
+    try:
+        completed = run_docker(args, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip() or None
+
+
+def _read_cache(cache: Path | None) -> dict[str, dict[str, object]]:
+    if cache is None or not cache.exists():
+        return {}
+    try:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_cache(cache: Path | None, reference: str, digest: str) -> None:
+    if cache is None:
+        return
+    data = _read_cache(cache)
+    data[reference] = {"digest": digest, "at": time.time()}
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError:
+        pass  # a cache that cannot be written is only a slower cache
+
+
+def resolve_base(reference: str, cache: Path | None = None) -> BaseRef:
     """Resolve a base image tag to its content digest.
 
     Base tags are mutable. python:3.12-slim moves on every patch release,
@@ -35,26 +78,54 @@ def resolve_base(reference: str) -> BaseRef:
     hashes the same and pyhusk reports a service as fresh while its image sits on
     a superseded base.
 
-    Memoized per reference, so a ten-service repo on one base makes one query.
+    Resolution order, and why:
+
+    1. A cache entry younger than DIGEST_TTL_SECONDS. Skips the registry
+       entirely, which is what keeps a dev loop under Docker Hub's rate limit.
+    2. The registry manifest, via buildx. The authoritative answer.
+    3. The classic local image store. Rarely helps in practice, because BuildKit
+       keeps pulled bases in its own cache rather than the image store, but it is
+       cheap and correct when a user has pulled the tag by hand.
+    4. Any cache entry, however old. A registry blip must not restale every
+       service: a stale digest is still a real digest, and the hash stays put.
+    5. The tag string itself, flagged unverified. Last resort, and loud.
+
+    Memoized per reference for the life of the process, so a ten-service repo
+    on one base resolves once.
     """
-    remote = run_docker(
-        ["buildx", "imagetools", "inspect", reference, "--format", "{{.Manifest.Digest}}"],
-        timeout=60,
-    )
-    if remote.returncode == 0 and remote.stdout.strip():
-        return BaseRef(reference=reference, digest=remote.stdout.strip(), verified=True)
+    if reference in _MEMO:
+        return _MEMO[reference]
 
-    local = run_docker(
-        ["image", "inspect", reference, "--format", "{{index .RepoDigests 0}}"], timeout=30
-    )
-    if local.returncode == 0 and "@" in local.stdout:
-        return BaseRef(
-            reference=reference, digest=local.stdout.strip().split("@", 1)[1], verified=True
-        )
+    def done(digest: str, verified: bool, source: str) -> BaseRef:
+        result = BaseRef(reference=reference, digest=digest, verified=verified, source=source)
+        _MEMO[reference] = result
+        return result
 
-    # No registry and no local copy. Fall back to the old tag-only behaviour, but
-    # say so rather than pretending the base is pinned.
-    return BaseRef(reference=reference, digest=reference, verified=False)
+    cached = _read_cache(cache).get(reference)
+    if isinstance(cached, dict) and isinstance(cached.get("digest"), str):
+        age = time.time() - float(cached.get("at") or 0)
+        if 0 <= age < DIGEST_TTL_SECONDS:
+            return done(cached["digest"], True, "cache")
+
+    remote = _docker_stdout(
+        ["buildx", "imagetools", "inspect", reference, "--format", "{{.Manifest.Digest}}"], 60
+    )
+    if remote:
+        _write_cache(cache, reference, remote)
+        return done(remote, True, "registry")
+
+    local = _docker_stdout(
+        ["image", "inspect", reference, "--format", "{{index .RepoDigests 0}}"], 30
+    )
+    if local and "@" in local:
+        digest = local.split("@", 1)[1]
+        _write_cache(cache, reference, digest)
+        return done(digest, True, "local")
+
+    if isinstance(cached, dict) and isinstance(cached.get("digest"), str):
+        return done(cached["digest"], True, "stale-cache")
+
+    return done(reference, False, "tag")
 
 
 def base_hash(base: BaseRef, requirements_text: str) -> str:
@@ -99,13 +170,13 @@ def read_slice_label(tag: str) -> str | None:
 
     # The local image is gone, which is the normal state on a fresh CI runner.
     # This is why the hash lives on the image rather than in .build/.
-    remote = run_docker(
-        ["buildx", "imagetools", "inspect", tag, "--format", "{{json .Image}}"], timeout=60
+    remote = _docker_stdout(
+        ["buildx", "imagetools", "inspect", tag, "--format", "{{json .Image}}"], 60
     )
-    if remote.returncode != 0:
+    if remote is None:
         return None
     try:
-        payload = json.loads(remote.stdout)
+        payload = json.loads(remote)
     except json.JSONDecodeError:
         return None
     if isinstance(payload, dict):
