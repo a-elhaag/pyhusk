@@ -55,3 +55,27 @@ def venv_in(fastapi_venv: Path):
         return repo
 
     return link
+
+
+def docker_can_pull() -> bool:
+    """True when the daemon can actually fetch a base image.
+
+    docker_available() only proves the daemon answers. A sandbox with no egress
+    to a registry passes that check and then hangs forever inside `docker build`,
+    which looks identical to a slow build. Bounding the pull turns an infinite
+    hang into an honest skip.
+    """
+    from pyhusk.docker import docker_available, run_docker
+
+    if not docker_available():
+        return False
+    try:
+        return run_docker(["pull", "--quiet", "alpine:3.20"], timeout=120).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+needs_docker = pytest.mark.skipif(
+    not docker_can_pull(),
+    reason="needs a Docker daemon that can pull base images",
+)
