@@ -15,6 +15,7 @@ pyhusk = "pyhusk.cli:app"
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
+docs = ["mkdocs-material>=9.5"]
 
 [build-system]
 requires = ["hatchling"]

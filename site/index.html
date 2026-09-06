@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pyhusk — minimal Docker images for FastAPI monorepos</title>
+<meta name="description" content="pyhusk prunes a FastAPI monorepo down to the files, imports and dependencies one service actually uses, then builds the smallest correct Docker image for it." />
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #fbfaf7; color: #161512;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 32px; }
+
+  header.top {
+    display: flex; align-items: center; justify-content: space-between;
+    max-width: 880px; margin: 0 auto; padding: 28px 32px 0;
+    font-size: 14px;
+  }
+  header.top .word { font-weight: 700; letter-spacing: -0.01em; }
+  header.top nav a { color: #161512; text-decoration: none; opacity: 0.65; margin-left: 24px; }
+  header.top nav a:hover { opacity: 1; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    text-decoration: none; border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-primary { background: #161512; color: #fbfaf7; }
+  .btn-ghost { color: #161512; border-color: rgba(0,0,0,0.14); margin-left: 12px; }
+
+  .hero { text-align: center; padding: 96px 32px 40px; max-width: 820px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-block; font-size: 13px; font-weight: 600; color: #c05621;
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 22px;
+  }
+  h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 24px; font-weight: 700; }
+  .sub { font-size: 19px; line-height: 1.6; opacity: 0.68; margin: 0 auto 40px; max-width: 46ch; }
+  .actions { margin-bottom: 48px; }
+  .callout {
+    border-top: 1px solid rgba(0,0,0,0.1); padding-top: 24px; margin: 0 auto;
+    font-size: 14px; opacity: 0.55;
+  }
+
+  section { padding: 64px 0; border-top: 1px solid rgba(0,0,0,0.08); }
+  section h2 { font-size: 26px; letter-spacing: -0.01em; margin: 0 0 8px; text-align: center; }
+  section .lede { text-align: center; opacity: 0.62; font-size: 15px; margin: 0 auto 48px; max-width: 52ch; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+  .steps .step .n {
+    width: 30px; height: 30px; border-radius: 50%; background: #161512; color: #fbfaf7;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+    margin-bottom: 14px;
+  }
+  .steps h3 { font-size: 16px; margin: 0 0 8px; }
+  .steps p { font-size: 14px; line-height: 1.55; opacity: 0.68; margin: 0; }
+
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+  .features h3 { font-size: 15px; margin: 0 0 6px; }
+  .features p { font-size: 14px; line-height: 1.5; opacity: 0.68; margin: 0; }
+  .features code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+  .demo-frame {
+    border-radius: 14px; overflow: hidden; border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.08);
+  }
+  .demo-frame img { display: block; width: 100%; }
+  .demo-fallback {
+    background: #111114; color: #e8e8ea; font-family: ui-monospace, monospace; font-size: 13px;
+    line-height: 1.7; padding: 24px 26px; white-space: pre-wrap;
+  }
+
+  .quickstart pre {
+    background: #161512; color: #f2f1ee; padding: 22px 24px; border-radius: 12px;
+    font-size: 14px; line-height: 1.8; overflow-x: auto; margin: 0 auto; max-width: 560px;
+  }
+  .quickstart pre .c { opacity: 0.45; }
+
+  footer {
+    padding: 40px 32px 56px; text-align: center; font-size: 13px; opacity: 0.55;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  footer a { color: inherit; }
+
+  @media (max-width: 720px) {
+    .steps, .features { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <span class="word">pyhusk</span>
+  <nav>
+    <a href="docs/">Docs</a>
+    <a href="https://github.com/a-elhaag/pyhusk">GitHub</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <span class="eyebrow">For FastAPI monorepos</span>
+  <h1>Your Docker image doesn&rsquo;t need your whole monorepo.</h1>
+  <p class="sub">pyhusk traces what each service actually imports &mdash; including the <code class="mono">Depends()</code> chains its routes reach &mdash; and builds an image with only that.</p>
+  <div class="actions">
+    <a class="btn btn-primary" href="https://github.com/a-elhaag/pyhusk">View on GitHub</a>
+    <a class="btn btn-ghost" href="#quickstart">Quickstart</a>
+  </div>
+  <p class="callout mono">pyhusk init &nbsp;&middot;&nbsp; pyhusk build &nbsp;&middot;&nbsp; pyhusk plan --json</p>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="lede">Three steps, all automatic. No Dockerfiles to hand-maintain per service.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Discover</h3>
+        <p>Imports the service's app, walks its routes and their <code class="mono">Depends()</code> trees to find every module a request can actually reach.</p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Prune</h3>
+        <p>Follows the import graph from there, then resolves the transitive package closure from your lockfile &mdash; nothing unreferenced comes along.</p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Build &amp; verify</h3>
+        <p>Builds the image, boots it, and checks its OpenAPI schema (or a healthcheck) before calling the build done.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>See it run</h2>
+    <p class="lede">A two-service monorepo. One shared module, one service that doesn't use it.</p>
+    <div class="demo-frame">
+      <img src="demo.gif" alt="Terminal recording of pyhusk list and pyhusk build against a two-service demo repo" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'demo-fallback', textContent:'$ pyhusk build\na: building\na: built a:latest  6/10 files  10 packages  52.2 MB compressed\nb: building\nb: built b:latest  4/10 files  13 packages  52.7 MB compressed\n$ pyhusk build\na: unchanged\nb: unchanged'}))" />
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it checks for you</h2>
+    <p class="lede">The parts that are easy to get wrong by hand.</p>
+    <div class="features">
+      <div>
+        <h3>Runtime dependencies, not just imports</h3>
+        <p>A route can reach code only through <code>Depends()</code>. pyhusk walks that tree at introspection time, not just the static AST.</p>
+      </div>
+      <div>
+        <h3>Rebuilds only what changed</h3>
+        <p>Content-hash staleness, stamped as a registry label so it survives ephemeral CI runners &mdash; not a local file that resets every run.</p>
+      </div>
+      <div>
+        <h3>Shared base images</h3>
+        <p>Services with identical dependencies build one base image once, deterministically, regardless of which other services are in the same run.</p>
+      </div>
+      <div>
+        <h3>Verified before it's tagged</h3>
+        <p>Schema comparison when OpenAPI is on, a healthcheck poll when it isn't, boot-only as the last resort &mdash; and a failed check untags the image so it's retried, not silently kept.</p>
+      </div>
+      <div>
+        <h3>CI-ready by default</h3>
+        <p><code>pyhusk plan --json</code> reports which services are stale, so a matrix job builds only those &mdash; no bespoke scripting.</p>
+      </div>
+      <div>
+        <h3>Escape hatches when it guesses wrong</h3>
+        <p><code>--include</code> forces a path into the slice; <code>--compare</code> builds a whole-repo image alongside it so you can see whether pruning actually helped.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="quickstart" id="quickstart">
+  <div class="wrap">
+    <h2>Quickstart</h2>
+    <p class="lede">Python 3.12+, a <code class="mono">uv</code>-managed monorepo, and Docker.</p>
+    <pre><span class="c"># from your monorepo root</span>
+uv tool install pyhusk
+pyhusk init          <span class="c"># writes pyhusk.yaml from detected services</span>
+pyhusk list
+pyhusk build         <span class="c"># builds every stale service</span></pre>
+  </div>
+</section>
+
+<footer>
+  pyhusk is licensed under <a href="https://github.com/a-elhaag/pyhusk/blob/master/LICENSE">Apache&nbsp;2.0</a>.
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/a-elhaag/pyhusk">Source on GitHub</a>
+</footer>
+
+</body>
+</html>

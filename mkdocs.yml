@@ -1,0 +1,42 @@
+site_name: pyhusk
+site_description: Minimal Docker images for FastAPI monorepos
+site_url: https://a-elhaag.github.io/pyhusk/docs/
+repo_url: https://github.com/a-elhaag/pyhusk
+repo_name: a-elhaag/pyhusk
+docs_dir: docs_src
+site_dir: site/docs
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.superfences
+  - pymdownx.highlight
+
+nav:
+  - Overview: index.md
+  - Quickstart: quickstart.md
+  - Configuration: configuration.md
+  - Commands: commands.md
+  - Staleness: staleness.md
+  - Verification: verification.md
+  - CI: ci.md
+  - Known limits: limits.md
