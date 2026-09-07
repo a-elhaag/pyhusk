@@ -9,6 +9,8 @@
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {
     background: #fbfaf7; color: #161512;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
