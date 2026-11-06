@@ -4,11 +4,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pyhusk.config import ServiceConfig
+from pyhusk.config import ServiceConfig, expand_includes
 from pyhusk.deps import RequirementsResult, resolve_requirements
 from pyhusk.discover import RouteInfo, probe
 from pyhusk.dockerize import override_for, render_dockerfile
-from pyhusk.graph import build_slice
+from pyhusk.graph import SliceResult, build_slice
 from pyhusk.staleness import BaseRef, base_hash, read_slice_label, resolve_base, slice_hash
 
 BASE_IMAGE_PREFIX = "pyhusk-base"
@@ -27,6 +27,7 @@ class Resolution:
     dockerfile_text: str
     slice_hash: str
     warnings: list[str] = field(default_factory=list)
+    sliced: SliceResult | None = None
 
     @property
     def tag(self) -> str:
@@ -56,8 +57,12 @@ def resolve(
     warnings: list[str] = []
     root = repo_root.resolve()
 
+    combined_includes = set(includes)
+    if service.include:
+        combined_includes.update(expand_includes(repo_root, service.include))
+
     probed = probe(repo_root, service)
-    sliced = build_slice(repo_root, probed.files, includes)
+    sliced = build_slice(repo_root, probed.files, combined_includes)
 
     for item in sliced.unresolved:
         warnings.append(
@@ -70,7 +75,11 @@ def resolve(
             f"image, but its own imports were not followed"
         )
 
-    requirements = resolve_requirements(repo_root, sliced.third_party)
+    server_needed = (
+        service.kind == "fastapi"
+        and (service.command is None or "uvicorn" in " ".join(service.command))
+    )
+    requirements = resolve_requirements(repo_root, sliced.third_party, server_distribution=server_needed)
     for missing in requirements.unmapped:
         warnings.append(
             f"import {missing!r} matched no installed distribution; if the image fails "
@@ -114,6 +123,7 @@ def resolve(
             repo_root, sliced.files, requirements.text, dockerfile_text, base
         ),
         warnings=warnings,
+        sliced=sliced,
     )
 
 

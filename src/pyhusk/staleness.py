@@ -11,6 +11,7 @@ from pathlib import Path
 from pyhusk.docker import run_docker
 
 SLICE_LABEL = "org.pyhusk.slice"
+COMMIT_LABEL = "org.pyhusk.commit"
 
 # How long a cached base digest is trusted before the registry is asked again.
 # Every plan and build used to query the registry per base image, which burns
@@ -182,4 +183,26 @@ def read_slice_label(tag: str) -> str | None:
     if isinstance(payload, dict):
         labels = (payload.get("config") or {}).get("Labels") or {}
         return labels.get(SLICE_LABEL)
+    return None
+
+
+def read_commit_label(tag: str) -> str | None:
+    """Read the git commit stamped on a built image, locally then from a registry."""
+    fmt = f'{{{{index .Config.Labels "{COMMIT_LABEL}"}}}}'
+    local = run_docker(["image", "inspect", tag, "--format", fmt])
+    if local.returncode == 0:
+        return local.stdout.strip() or None
+
+    remote = _docker_stdout(
+        ["buildx", "imagetools", "inspect", tag, "--format", "{{json .Image}}"], 60
+    )
+    if remote is None:
+        return None
+    try:
+        payload = json.loads(remote)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(payload, dict):
+        labels = (payload.get("config") or {}).get("Labels") or {}
+        return labels.get(COMMIT_LABEL)
     return None

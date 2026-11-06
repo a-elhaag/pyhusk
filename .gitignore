@@ -5,3 +5,5 @@ __pycache__/
 site/docs/
 .claude/
 .impeccable/
+.DS_Store
+.agents/

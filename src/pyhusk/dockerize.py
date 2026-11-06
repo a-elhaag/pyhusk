@@ -22,6 +22,8 @@ def override_for(service: ServiceConfig) -> Path | None:
 
 def _cmd(repo_root: Path, service: ServiceConfig) -> str:
     """Exec-form CMD running uvicorn against the service's app."""
+    if service.command:
+        return f"CMD {json.dumps(service.command)}"
     target = f"{service.module_path(repo_root)}:{service.app}"
     argv = ["uvicorn", target]
     if service.factory:
@@ -47,11 +49,10 @@ def render_dockerfile(
             "COPY requirements.txt .",
             "RUN pip install --no-cache-dir -r requirements.txt",
         ]
-    lines += [
-        "COPY . .",
-        f"EXPOSE {service.port}",
-        _cmd(repo_root, service),
-    ]
+    lines.append("COPY . .")
+    if service.kind == "fastapi" or service.port != 8000:
+        lines.append(f"EXPOSE {service.port}")
+    lines.append(_cmd(repo_root, service))
     return "\n".join(lines) + "\n"
 
 

@@ -12,6 +12,16 @@ services:
     port: 8000
     registry: ghcr.io/acme         # enables staleness checks against a registry
     healthcheck: /healthz          # used when the OpenAPI schema is disabled
+    include:                       # extra files, directories, or globs
+      - migrations/**
+      - templates/
+    env:                           # environment variables for probe and container verification
+      DATABASE_URL: sqlite:///:memory:
+    forbid_imports:                # enforce architectural boundaries
+      - services.billing
+      - torch
+    kind: fastapi                  # fastapi | worker | job
+    command: null                  # custom CMD exec list override
 ```
 
 | Key | Required | Meaning |
@@ -23,3 +33,8 @@ services:
 | `port` | no | Port the service listens on inside the container. Default `8000`. |
 | `registry` | no | When set, staleness is checked against this registry's copy of the image, not just the local Docker daemon. |
 | `healthcheck` | no | Path to poll during [verification](verification.md) when the service's OpenAPI schema is disabled. |
+| `include` | no | List of files, directories, or globs to force into the service's slice. |
+| `env` | no | Environment variables injected during out-of-process probe and container verification. |
+| `forbid_imports` | no | Banned local modules or third-party packages checked by `pyhusk lint`. |
+| `kind` | no | Service workload type (`fastapi`, `worker`, `job`). Default `fastapi`. |
+| `command` | no | Custom container `CMD` list (e.g. `["celery", "-A", "tasks", "worker"]`). |

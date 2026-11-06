@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -40,6 +41,9 @@ def probe(repo_root: Path, service: ServiceConfig) -> ProbeResult:
     pyhusk's own interpreter, and an import-time crash becomes a readable error
     instead of taking pyhusk down with it.
     """
+    if service.kind in {"worker", "job"}:
+        return ProbeResult(files=[service.entry.resolve()], routes=[], openapi_url=None)
+
     python = venv_python(repo_root)
     if not python.exists():
         raise PyhuskError(
@@ -53,10 +57,15 @@ def probe(repo_root: Path, service: ServiceConfig) -> ProbeResult:
     if service.factory:
         argv.append("--factory")
 
+    env = dict(os.environ)
+    if service.env:
+        env.update(service.env)
+
     try:
         completed = subprocess.run(
             argv,
             cwd=repo_root,
+            env=env,
             capture_output=True,
             text=True,
             timeout=PROBE_TIMEOUT_SECONDS,

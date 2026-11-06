@@ -94,9 +94,11 @@ def verify(
     that dies on startup, into a build failure rather than a deploy failure.
     """
     tier = choose_tier(openapi_url, service.healthcheck)
-    started = run_docker(
-        ["run", "-d", "-p", f"127.0.0.1:0:{service.port}", tag], timeout=120
-    )
+    run_args = ["run", "-d", "-p", f"127.0.0.1:0:{service.port}"]
+    for k, v in sorted(service.env.items()):
+        run_args.extend(["-e", f"{k}={v}"])
+    run_args.append(tag)
+    started = run_docker(run_args, timeout=120)
     if started.returncode != 0:
         return VerifyResult(False, tier, f"could not start container:\n{started.stderr.strip()}")
     container = started.stdout.strip()

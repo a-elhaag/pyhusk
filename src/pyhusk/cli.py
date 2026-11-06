@@ -2,31 +2,44 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Annotated
 
 import typer
 import yaml
 
+from pyhusk.affected import affected_services, affected_tests
 from pyhusk.config import (
     CONFIG_NAME,
+    SKIP_DIRS,
     PyhuskConfig,
     ServiceConfig,
     autodetect_services,
+    expand_includes,
     load_config,
 )
 from pyhusk.deps import RequirementsResult, all_requirements
+from pyhusk.discover import venv_python
 from pyhusk.docker import image_exists, image_size, require_docker, run_docker
 from pyhusk.dockerize import assemble_context, render_base_dockerfile, render_dockerfile
 from pyhusk.errors import PyhuskError
+from pyhusk.git import (
+    changed_files_since,
+    commit_history_for_files,
+    head_commit,
+    last_commit_for_files,
+)
+from pyhusk.graph import trace_why
+from pyhusk.lint import LintIssue, lint_service
 from pyhusk.pipeline import Resolution, is_stale, resolve
 from pyhusk.report import count_python_files, human_size
-from pyhusk.staleness import SLICE_LABEL
+from pyhusk.staleness import COMMIT_LABEL, SLICE_LABEL
 from pyhusk.verify import verify
 
 app = typer.Typer(
     add_completion=False,
-    help="Minimal Docker images for FastAPI monorepos.",
+    help="Minimal Docker images, architecture linting, and CI intelligence for Python monorepos.",
     no_args_is_help=True,
 )
 
@@ -100,6 +113,7 @@ def list_services(repo: RepoOption = Path(".")) -> None:
         config = load_config(repo)
     except PyhuskError as exc:
         _fail(str(exc))
+
     for name, service in sorted(config.services.items()):
         relative = service.entry.relative_to(repo)
         suffix = "()" if service.factory else ""
@@ -108,7 +122,7 @@ def list_services(repo: RepoOption = Path(".")) -> None:
 
 IncludeOption = Annotated[
     list[Path] | None,
-    typer.Option("--include", help="Force a path into the slice. Repeatable."),
+    typer.Option("--include", help="Force a path or directory into the slice. Repeatable."),
 ]
 
 
@@ -146,13 +160,6 @@ def _print_warnings(resolutions: dict[str, Resolution]) -> None:
 
 
 def _build_bases(repo: Path, resolutions: dict[str, Resolution]) -> None:
-    """Build every shared base image the given resolutions need, once each.
-
-    Separate from service builds because `pyhusk plan --json` exists to fan out a
-    CI matrix, and two runners building the same base tag concurrently race. A
-    file lock cannot help across machines that share no filesystem, so CI runs
-    this as one job that the matrix depends on.
-    """
     wanted: dict[str, RequirementsResult] = {}
     sources: dict[str, str] = {}
     for resolution in resolutions.values():
@@ -196,11 +203,6 @@ def build_bases(
 
 
 def _compare_against_naive(repo: Path, resolution: Resolution) -> None:
-    """Build a whole-repo image the naive way and report the difference.
-
-    Doubles build time, so it is off by default. It exists so the size claim can
-    be checked rather than asserted.
-    """
     context = repo / ".build" / "_naive" / resolution.name
     if context.exists():
         shutil.rmtree(context)
@@ -265,12 +267,8 @@ def build(
 ) -> None:
     """Build minimal images for the named services, or every stale service."""
     repo = repo.resolve()
-    includes = [(repo / path).resolve() for path in (include or [])]
-    for path in includes:
-        if not path.exists():
-            _fail(f"--include path does not exist: {path}")
-
     try:
+        includes = expand_includes(repo, include or [])
         config = load_config(repo)
     except PyhuskError as exc:
         _fail(str(exc))
@@ -314,17 +312,19 @@ def build(
     failures: list[str] = []
     for name, resolution in sorted(pending.items()):
         typer.echo(f"{name}: building")
-        built = run_docker(
-            [
-                "build",
-                "-t",
-                resolution.tag,
-                "--label",
-                f"{SLICE_LABEL}={resolution.slice_hash}",
-                str(repo / ".build" / name),
-            ],
-            capture_output=False,
-        )
+        build_args = [
+            "build",
+            "-t",
+            resolution.tag,
+            "--label",
+            f"{SLICE_LABEL}={resolution.slice_hash}",
+        ]
+        last = last_commit_for_files(repo, resolution.files)
+        if last and last[0]:
+            build_args.extend(["--label", f"{COMMIT_LABEL}={last[0]}"])
+        build_args.append(str(repo / ".build" / name))
+
+        built = run_docker(build_args, capture_output=False)
         if built.returncode != 0:
             typer.secho(f"{name}: docker build failed", fg=typer.colors.RED, err=True)
             failures.append(name)
@@ -340,9 +340,6 @@ def build(
                     fg=typer.colors.RED,
                     err=True,
                 )
-                # The image is already stamped with this content's hash. Left in
-                # place, the next build would compare hashes, see a match, and
-                # report "unchanged" - a broken image would never be retried.
                 run_docker(["rmi", "-f", resolution.tag])
                 typer.secho(
                     f"{name}: removed {resolution.tag}; the next build will retry",
@@ -388,15 +385,13 @@ def plan(
 ) -> None:
     """Report which services are stale, without building anything."""
     repo = repo.resolve()
-    includes = [(repo / path).resolve() for path in (include or [])]
     try:
+        includes = expand_includes(repo, include or [])
         config = load_config(repo)
     except PyhuskError as exc:
         _fail(str(exc))
 
     resolutions = _resolve_all(repo, _selected(config, service), includes, not no_shared_base)
-    # Warnings go to stderr so `--json` stdout stays a clean document; a CI job
-    # pipes this straight into a matrix definition.
     _print_warnings(resolutions)
 
     entries: list[dict[str, object]] = []
@@ -430,3 +425,240 @@ def plan(
 
     for entry in entries:
         typer.echo(f"{entry['name']}\t{'stale' if entry['stale'] else 'unchanged'}")
+
+
+@app.command()
+def why(
+    service: Annotated[str, typer.Argument(help="Service name to trace.")],
+    target: Annotated[str, typer.Argument(help="File path or package name to trace.")],
+    repo: RepoOption = Path("."),
+) -> None:
+    """Show the shortest import path from a service entry to a file or package."""
+    repo = repo.resolve()
+    try:
+        config = load_config(repo)
+    except PyhuskError as exc:
+        _fail(str(exc))
+    if service not in config.services:
+        _fail(f"unknown service {service!r}. Known: {', '.join(sorted(config.services))}")
+
+    res = resolve(repo, service, config.services[service])
+    if res.sliced is None:
+        _fail("slice could not be resolved")
+
+    chain = trace_why(repo, [res.service.entry], res.sliced.edges, target)
+    if chain is None:
+        _fail(f"{target!r} is not reached by service {service!r}")
+
+    typer.echo(f"{service} reaches {target}:")
+    for edge in chain:
+        src = edge.source.relative_to(repo)
+        tgt = edge.target.relative_to(repo) if isinstance(edge.target, Path) else edge.target
+        typer.echo(f"  {src}:{edge.lineno} -> {tgt} ({edge.kind})")
+
+
+@app.command()
+def unused(
+    repo: RepoOption = Path("."),
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+) -> None:
+    """Find Python files in the monorepo not used by any service."""
+    repo = repo.resolve()
+    try:
+        config = load_config(repo)
+    except PyhuskError as exc:
+        _fail(str(exc))
+
+    resolutions = _resolve_all(repo, config.services, [], False)
+    used_files: set[Path] = set()
+    for res in resolutions.values():
+        used_files.update(res.files)
+
+    all_py: list[Path] = []
+    for p in repo.rglob("*.py"):
+        parts = p.relative_to(repo).parts
+        if any(part in SKIP_DIRS or part.startswith(".") for part in parts):
+            continue
+        all_py.append(p.resolve())
+
+    unused_files = sorted(
+        f for f in all_py if f not in used_files and not f.name.startswith("test_")
+    )
+
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {"unused_files": [str(f.relative_to(repo)) for f in unused_files]},
+                indent=2,
+            )
+        )
+        return
+
+    if unused_files:
+        typer.echo(f"Found {len(unused_files)} unreferenced Python file(s):")
+        for f in unused_files:
+            typer.echo(f"  {f.relative_to(repo)}")
+    else:
+        typer.echo("All local Python files are referenced by at least one service.")
+
+
+@app.command()
+def lint(
+    service: Annotated[
+        list[str] | None, typer.Argument(help="Services to lint. Default: all.")
+    ] = None,
+    repo: RepoOption = Path("."),
+    strict: Annotated[bool, typer.Option("--strict", help="Treat warnings as errors.")] = False,
+    no_ruff: Annotated[bool, typer.Option("--no-ruff", help="Skip ruff check.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Output results as JSON.")] = False,
+) -> None:
+    """Lint monorepo architecture, boundaries, circular imports, and code quality."""
+    repo = repo.resolve()
+    try:
+        config = load_config(repo)
+    except PyhuskError as exc:
+        _fail(str(exc))
+
+    resolutions = _resolve_all(repo, _selected(config, service), [], False)
+    all_issues: list[LintIssue] = []
+
+    for name, res in sorted(resolutions.items()):
+        issues = lint_service(repo, name, res, config, strict=strict, run_ruff=not no_ruff)
+        all_issues.extend(issues)
+
+    if as_json:
+        typer.echo(
+            json.dumps(
+                [
+                    {
+                        "service": iss.service,
+                        "code": iss.code,
+                        "severity": iss.severity,
+                        "message": iss.message,
+                        "detail": iss.detail,
+                    }
+                    for iss in all_issues
+                ],
+                indent=2,
+            )
+        )
+        if any(i.severity == "error" for i in all_issues):
+            raise typer.Exit(code=1)
+        return
+
+    if not all_issues:
+        typer.secho("lint passed: no architectural or code quality issues found.", fg=typer.colors.GREEN)
+        return
+
+    for iss in all_issues:
+        color = typer.colors.RED if iss.severity == "error" else typer.colors.YELLOW
+        typer.secho(f"[{iss.severity.upper()}] {iss.service} ({iss.code}): {iss.message}", fg=color)
+        if iss.detail:
+            typer.echo(iss.detail)
+
+    error_count = sum(1 for i in all_issues if i.severity == "error")
+    warning_count = sum(1 for i in all_issues if i.severity == "warning")
+    summary = f"{error_count} error(s), {warning_count} warning(s)"
+    if error_count > 0:
+        typer.secho(f"lint failed with {summary}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    else:
+        typer.secho(f"lint passed with {summary}", fg=typer.colors.YELLOW)
+
+
+@app.command()
+def log(
+    service: Annotated[str, typer.Argument(help="Service name to inspect.")],
+    repo: RepoOption = Path("."),
+    limit: Annotated[int, typer.Option("-n", "--limit", help="Number of commits.")] = 10,
+) -> None:
+    """Show git commit history for a service's slice."""
+    repo = repo.resolve()
+    try:
+        config = load_config(repo)
+    except PyhuskError as exc:
+        _fail(str(exc))
+    if service not in config.services:
+        _fail(f"unknown service {service!r}. Known: {', '.join(sorted(config.services))}")
+
+    res = resolve(repo, service, config.services[service])
+    history = commit_history_for_files(repo, res.files, limit=limit)
+    if not history:
+        typer.echo(f"No git history found for service {service!r}.")
+        return
+
+    typer.echo(f"Recent commits touching slice for {service}:")
+    for item in history:
+        typer.echo(f"  {item['commit']}  {item['date']}  {item['author']}  {item['message']}")
+
+
+@app.command()
+def affected(
+    repo: RepoOption = Path("."),
+    since: Annotated[str, typer.Option("--since", help="Git ref to diff against.")] = "HEAD~1",
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+) -> None:
+    """Show services and test files affected by changes since a git ref."""
+    repo = repo.resolve()
+    try:
+        config = load_config(repo)
+    except PyhuskError as exc:
+        _fail(str(exc))
+
+    changed = changed_files_since(repo, since)
+    resolutions = _resolve_all(repo, config.services, [], False)
+    aff_services = affected_services(repo, resolutions, changed)
+    aff_tests = affected_tests(repo, changed)
+
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "since": since,
+                    "changed_files": [str(f.relative_to(repo)) for f in sorted(changed)],
+                    "affected_services": aff_services,
+                    "affected_tests": [str(t.relative_to(repo)) for t in aff_tests],
+                },
+                indent=2,
+            )
+        )
+        return
+
+    typer.echo(f"Changes since {since} ({len(changed)} file(s)):")
+    typer.echo(f"Affected services ({len(aff_services)}): " + (", ".join(aff_services) or "none"))
+    typer.echo(f"Affected test files ({len(aff_tests)}):")
+    for t in aff_tests:
+        typer.echo(f"  {t.relative_to(repo)}")
+
+
+@app.command()
+def test(
+    repo: RepoOption = Path("."),
+    since: Annotated[str, typer.Option("--since", help="Git ref to diff against.")] = "HEAD~1",
+    all_tests: Annotated[
+        bool, typer.Option("--all", help="Run all tests if none affected.")
+    ] = False,
+) -> None:
+    """Run pytest only on test files affected by changes since a git ref."""
+    repo = repo.resolve()
+    changed = changed_files_since(repo, since)
+    aff_tests = affected_tests(repo, changed)
+
+    python = venv_python(repo)
+
+    if not aff_tests:
+        if all_tests:
+            typer.echo(f"No tests affected since {since}. Running all tests (--all)...")
+            cmd = [str(python), "-m", "pytest"]
+            res = subprocess.run(cmd, cwd=repo)
+            raise typer.Exit(code=res.returncode)
+        typer.echo(f"No tests affected since {since}.")
+        return
+
+    typer.echo(f"Running {len(aff_tests)} affected test file(s) since {since}:")
+    for t in aff_tests:
+        typer.echo(f"  {t.relative_to(repo)}")
+
+    cmd = [str(python), "-m", "pytest", *[str(t) for t in aff_tests]]
+    res = subprocess.run(cmd, cwd=repo)
+    raise typer.Exit(code=res.returncode)

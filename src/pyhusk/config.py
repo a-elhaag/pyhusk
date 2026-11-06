@@ -25,6 +25,11 @@ class ServiceConfig(BaseModel):
     registry: str | None = None
     factory: bool = False
     healthcheck: str | None = None
+    include: list[str] = []
+    env: dict[str, str] = {}
+    forbid_imports: list[str] = []
+    kind: str = "fastapi"
+    command: list[str] | None = None
 
     def module_path(self, repo_root: Path) -> str:
         """Dotted module path of the entry file, for the uvicorn target."""
@@ -36,11 +41,40 @@ class PyhuskConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     services: dict[str, ServiceConfig]
+    isolate_services: bool = True
 
 
 def _is_skipped(path: Path, repo_root: Path) -> bool:
     parts = path.relative_to(repo_root).parts
     return any(part in SKIP_DIRS or part.startswith(".") for part in parts)
+
+
+def expand_includes(repo_root: Path, patterns: list[str | Path]) -> list[Path]:
+    """Expand files, directories, and glob patterns within the repository."""
+    root = repo_root.resolve()
+    found: set[Path] = set()
+    for item in patterns:
+        item_str = str(item)
+        if any(c in item_str for c in ("*", "?", "[")):
+            for match in root.glob(item_str):
+                res = match.resolve()
+                if res.is_file() and res.is_relative_to(root) and not _is_skipped(res, root):
+                    found.add(res)
+        else:
+            res = (root / item).resolve()
+            if not res.exists():
+                raise PyhuskError(f"Include path does not exist: {item}")
+            try:
+                res.relative_to(root)
+            except ValueError:
+                raise PyhuskError(f"Include path escapes repository root: {item}")
+            if res.is_dir():
+                for sub in sorted(res.rglob("*")):
+                    if sub.is_file() and not _is_skipped(sub, root):
+                        found.add(sub.resolve())
+            elif res.is_file():
+                found.add(res)
+    return sorted(found)
 
 
 def autodetect_services(repo_root: Path) -> dict[str, ServiceConfig]:

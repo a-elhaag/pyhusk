@@ -83,7 +83,9 @@ def _load_lock(repo_root: Path) -> dict[str, tuple[str, list[str]]]:
     return packages
 
 
-def resolve_requirements(repo_root: Path, third_party: Iterable[str]) -> RequirementsResult:
+def resolve_requirements(
+    repo_root: Path, third_party: Iterable[str], server_distribution: bool = True
+) -> RequirementsResult:
     """Turn third-party import names into a pinned, transitively closed requirements file."""
     mapping = {normalize(k): v for k, v in _packages_distributions(repo_root).items()}
     lock = _load_lock(repo_root)
@@ -97,13 +99,14 @@ def resolve_requirements(repo_root: Path, third_party: Iterable[str]) -> Require
             continue
         roots.update(normalize(dist) for dist in distributions)
 
-    server = normalize(SERVER_DISTRIBUTION)
-    if server in lock:
-        roots.add(server)
-    else:
-        unmapped.append(
-            f"{SERVER_DISTRIBUTION} (needed to run the app, but absent from uv.lock)"
-        )
+    if server_distribution:
+        server = normalize(SERVER_DISTRIBUTION)
+        if server in lock:
+            roots.add(server)
+        else:
+            unmapped.append(
+                f"{SERVER_DISTRIBUTION} (needed to run the app, but absent from uv.lock)"
+            )
 
     # Transitive closure over the lock graph.
     resolved: set[str] = set()
