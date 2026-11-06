@@ -60,3 +60,17 @@ def test_list_shows_services_and_entries(tmp_path):
     assert result.exit_code == 0
     assert "auth" in result.output
     assert "services/auth/main.py" in result.output
+
+
+def test_init_installs_agent_skill(tmp_path):
+    write_service(tmp_path, "auth")
+    runner.invoke(app, ["init", "--repo", str(tmp_path)])
+    assert (tmp_path / ".agents/skills/pyhusk/SKILL.md").is_file()
+    assert (tmp_path / ".claude/skills/pyhusk/SKILL.md").is_file()
+
+
+def test_skill_command_installs_skill(tmp_path):
+    result = runner.invoke(app, ["skill", "--repo", str(tmp_path)])
+    assert result.exit_code == 0
+    assert (tmp_path / ".agents/skills/pyhusk/SKILL.md").is_file()
+    assert "installed agent skill" in result.output

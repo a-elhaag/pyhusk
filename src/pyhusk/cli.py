@@ -10,6 +10,7 @@ import typer
 import yaml
 
 from pyhusk.affected import affected_services, affected_tests
+from pyhusk.benchmark import format_markdown_table, run_service_benchmark
 from pyhusk.config import (
     CONFIG_NAME,
     SKIP_DIRS,
@@ -54,6 +55,41 @@ def _fail(message: str) -> None:
     raise typer.Exit(code=1)
 
 
+SKILL_CONTENT = """---
+name: pyhusk
+description: Minimal Docker image building, architecture linting, import tracing, and selective CI testing for FastAPI monorepos. Use whenever analyzing, building, linting, testing, or checking dependencies in a pyhusk-managed monorepo.
+---
+
+# pyhusk
+
+Tool for FastAPI monorepos: builds minimal, pruned Docker images, lints architecture boundaries, traces import lineage, and runs selective CI tests based on git diffs.
+
+## Quick Reference
+
+| Command | Purpose |
+|---|---|
+| `pyhusk lint [services...]` | Verify boundaries, circular imports, and `forbid_imports`. |
+| `pyhusk plan [--json]` | Identify stale services requiring Docker builds. |
+| `pyhusk why <service> <target>` | Trace shortest BFS import chain from entry to file or package. |
+| `pyhusk affected [--since REF]` | Show services and test files touched since git ref. |
+| `pyhusk test [--since REF]` | Run `pytest` only on test files affected by changes. |
+| `pyhusk unused` | Find unreferenced Python files across the monorepo. |
+| `pyhusk build [services...]` | Build pruned Docker images and verify via OpenAPI/healthcheck. |
+| `pyhusk log <service>` | Display git commit history affecting a service's slice. |
+"""
+
+
+def _install_skill(repo: Path) -> None:
+    """Install agent skill into .agents/skills/pyhusk and .claude/skills/pyhusk."""
+    agents_dir = repo / ".agents" / "skills" / "pyhusk"
+    claude_dir = repo / ".claude" / "skills" / "pyhusk"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    (agents_dir / "SKILL.md").write_text(SKILL_CONTENT, encoding="utf-8")
+    (claude_dir / "SKILL.md").write_text(SKILL_CONTENT, encoding="utf-8")
+    typer.echo("installed agent skill into .agents/skills/pyhusk/ and .claude/skills/pyhusk/")
+
+
 def _ensure_gitignored(repo: Path) -> None:
     """Add .build/ to .gitignore exactly once."""
     gitignore = repo / ".gitignore"
@@ -70,8 +106,11 @@ def _ensure_gitignored(repo: Path) -> None:
 
 
 @app.command()
-def init(repo: RepoOption = Path(".")) -> None:
-    """Write pyhusk.yaml from detected services and ignore the build directory."""
+def init(
+    repo: RepoOption = Path("."),
+    no_skill: Annotated[bool, typer.Option("--no-skill", help="Skip agent skill installation.")] = False,
+) -> None:
+    """Write pyhusk.yaml from detected services, ignore build dir, and install agent skill."""
     repo = repo.resolve()
     config_path = repo / CONFIG_NAME
 
@@ -103,6 +142,15 @@ def init(repo: RepoOption = Path(".")) -> None:
         )
 
     _ensure_gitignored(repo)
+    if not no_skill:
+        _install_skill(repo)
+
+
+@app.command("skill")
+def install_skill_command(repo: RepoOption = Path(".")) -> None:
+    """Install or update the pyhusk agent skill in the current workspace."""
+    repo = repo.resolve()
+    _install_skill(repo)
 
 
 @app.command("list")
@@ -662,3 +710,66 @@ def test(
     cmd = [str(python), "-m", "pytest", *[str(t) for t in aff_tests]]
     res = subprocess.run(cmd, cwd=repo)
     raise typer.Exit(code=res.returncode)
+
+
+@app.command()
+def benchmark(
+    service: Annotated[
+        list[str] | None, typer.Argument(help="Services to benchmark. Default: all.")
+    ] = None,
+    repo: RepoOption = Path("."),
+    no_cache: Annotated[
+        bool, typer.Option("--no-cache", help="Do not use Docker cache for measurement.")
+    ] = True,
+    markdown: Annotated[
+        bool, typer.Option("--markdown", help="Format output as a Markdown table.")
+    ] = False,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Output results as JSON.")
+    ] = False,
+) -> None:
+    """Benchmark build time and image size against a whole-repo baseline."""
+    repo = repo.resolve()
+    try:
+        require_docker()
+        config = load_config(repo)
+    except PyhuskError as exc:
+        _fail(str(exc))
+
+    resolutions = _resolve_all(repo, _selected(config, service), [], False)
+    _print_warnings(resolutions)
+
+    benchmarks = []
+    for name, resolution in sorted(resolutions.items()):
+        typer.echo(f"benchmarking {name} (pruned vs naive whole-repo)...")
+        try:
+            b = run_service_benchmark(repo, resolution, no_cache=no_cache)
+            benchmarks.append(b)
+        except Exception as exc:
+            _fail(str(exc))
+
+    if as_json:
+        typer.echo(json.dumps([b.to_dict() for b in benchmarks], indent=2))
+        return
+
+    if markdown:
+        typer.echo(format_markdown_table(benchmarks))
+        return
+
+    typer.echo("\nBenchmark Results:")
+    for b in benchmarks:
+        typer.secho(f"\n{b.name}:", fg=typer.colors.CYAN, bold=True)
+        typer.echo(
+            f"  Build time:  {b.pruned_time_s:.1f}s (pruned) vs {b.naive_time_s:.1f}s (naive) "
+            f"-> saved {b.time_saved_s:.1f}s ({b.time_saved_pct:.0%})"
+        )
+        typer.echo(
+            f"  Image size:  {human_size(b.pruned_size_bytes)} vs {human_size(b.naive_size_bytes)} "
+            f"-> saved {human_size(b.size_saved_bytes)} ({b.size_saved_pct:.0%})"
+        )
+        typer.echo(
+            f"  Packages:    {b.pruned_packages} pins vs {b.naive_packages} pins in lockfile"
+        )
+        typer.echo(
+            f"  Files:       {b.pruned_files} files vs {b.total_files} in repo"
+        )

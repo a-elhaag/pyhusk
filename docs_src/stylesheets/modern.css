@@ -1,0 +1,177 @@
+/* Modern Claude & Gemini Theme Styling for pyhusk */
+
+:root {
+  --pyhusk-accent: #6366f1;
+  --pyhusk-accent-glow: rgba(99, 102, 241, 0.25);
+  --pyhusk-secondary: #ec4899;
+  --pyhusk-radius: 12px;
+  --md-primary-fg-color: #0f1117;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #6366f1;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0b0c10;
+  --md-default-fg-color: #f1f5f9;
+  --md-primary-fg-color: #12151c;
+  --md-primary-bg-color: #f8fafc;
+  --pyhusk-card-bg: #141721;
+  --pyhusk-card-border: rgba(255, 255, 255, 0.08);
+  --pyhusk-code-bg: #0d0f17;
+}
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #faf9f5;
+  --md-default-fg-color: #1e293b;
+  --pyhusk-card-bg: #ffffff;
+  --pyhusk-card-border: rgba(0, 0, 0, 0.08);
+  --pyhusk-code-bg: #f1f5f9;
+}
+
+/* Subtle ambient backdrop */
+.md-main {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.03) 0px, transparent 50%);
+}
+
+/* Glassmorphism Navigation Header */
+.md-header {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--pyhusk-card-border);
+}
+
+/* Action bar with Copy Markdown button */
+.pyhusk-page-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--pyhusk-card-border);
+}
+
+.pyhusk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.copy-markdown-btn, .github-star-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  border: 1px solid var(--pyhusk-card-border);
+  background: var(--pyhusk-card-bg);
+  color: var(--md-default-fg-color);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.copy-markdown-btn:hover, .github-star-pill:hover {
+  border-color: var(--pyhusk-accent);
+  box-shadow: 0 0 12px var(--pyhusk-accent-glow);
+  transform: translateY(-1px);
+}
+
+.copy-markdown-btn:active {
+  transform: translateY(0);
+}
+
+.copy-markdown-btn.copied {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.copy-markdown-btn.copied .copy-icon {
+  display: none;
+}
+
+.copy-markdown-btn.copied .check-icon {
+  display: inline-block !important;
+}
+
+/* Feature Cards & Bento Grids */
+.pyhusk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 1.5rem 0;
+}
+
+.pyhusk-card {
+  padding: 1.5rem;
+  border-radius: var(--pyhusk-radius);
+  background: var(--pyhusk-card-bg);
+  border: 1px solid var(--pyhusk-card-border);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.pyhusk-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12), 0 0 16px var(--pyhusk-accent-glow);
+}
+
+.pyhusk-card h3 {
+  margin-top: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pyhusk-card p {
+  font-size: 0.88rem;
+  opacity: 0.8;
+  line-height: 1.55;
+  margin-bottom: 0;
+}
+
+/* Beautiful modern Code blocks */
+.md-typeset pre > code {
+  border-radius: var(--pyhusk-radius);
+  border: 1px solid var(--pyhusk-card-border);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+/* Admonitions styling */
+.md-typeset .admonition {
+  border-radius: var(--pyhusk-radius);
+  border: 1px solid var(--pyhusk-card-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  vertical-align: middle;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.md-content__inner {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

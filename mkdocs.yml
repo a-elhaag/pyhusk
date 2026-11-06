@@ -1,5 +1,5 @@
 site_name: pyhusk
-site_description: Minimal Docker images for FastAPI monorepos
+site_description: Architecture linting, selective CI testing, and minimal Docker slicing for FastAPI monorepos
 site_url: https://a-elhaag.github.io/pyhusk/docs/
 repo_url: https://github.com/a-elhaag/pyhusk
 repo_name: a-elhaag/pyhusk
@@ -8,35 +8,53 @@ site_dir: site/docs
 
 theme:
   name: material
+  custom_dir: overrides
   palette:
     - scheme: default
-      primary: black
-      accent: deep orange
+      primary: white
+      accent: indigo
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - scheme: slate
       primary: black
-      accent: deep orange
+      accent: indigo
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
   features:
+    - navigation.instant
+    - navigation.tracking
     - navigation.sections
+    - navigation.top
     - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  - stylesheets/modern.css
+
+extra_javascript:
+  - javascripts/modern.js
 
 markdown_extensions:
   - admonition
   - tables
+  - attr_list
   - pymdownx.superfences
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
 
 nav:
   - Overview: index.md
   - Quickstart: quickstart.md
+  - Architecture Linting: linting.md
+  - Selective CI Testing: selective-testing.md
+  - Import Lineage & Bloat: import-lineage.md
+  - Docker Slicing & Verify: docker-slicing.md
+  - Benchmarks & ROI: benchmarks.md
   - Configuration: configuration.md
-  - Commands: commands.md
-  - Staleness: staleness.md
-  - Verification: verification.md
-  - CI: ci.md
-  - Known limits: limits.md
+  - CLI Reference: commands.md
+  - AI Agent Skills: agent-skills.md
