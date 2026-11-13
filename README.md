@@ -36,17 +36,15 @@ see whether pruning is worth it on your repo before relying on it.
 
 ## Learn more
 
-The full reference — configuration schema, every command and flag, how staleness and
-verification work, and the known limits worth reading before you trust an image —
-lives in the [docs](https://a-elhaag.github.io/pyhusk/docs/):
+The full reference — configuration schema, every command and flag, and how staleness and
+verification work — lives in the [docs](https://a-elhaag.github.io/pyhusk/docs/):
 
-- [Quickstart](https://a-elhaag.github.io/pyhusk/docs/quickstart/)
-- [Configuration](https://a-elhaag.github.io/pyhusk/docs/configuration/)
-- [Commands](https://a-elhaag.github.io/pyhusk/docs/commands/)
-- [Staleness](https://a-elhaag.github.io/pyhusk/docs/staleness/)
-- [Verification](https://a-elhaag.github.io/pyhusk/docs/verification/)
-- [CI](https://a-elhaag.github.io/pyhusk/docs/ci/)
-- [Known limits](https://a-elhaag.github.io/pyhusk/docs/limits/)
+- [Install](https://a-elhaag.github.io/pyhusk/docs/get-started/install/)
+- [Quickstart](https://a-elhaag.github.io/pyhusk/docs/get-started/quickstart/)
+- [Build and verify images](https://a-elhaag.github.io/pyhusk/docs/guides/building/)
+- [Configuration](https://a-elhaag.github.io/pyhusk/docs/reference/configuration/)
+- [Commands](https://a-elhaag.github.io/pyhusk/docs/reference/commands/)
+- [Agent skills](https://a-elhaag.github.io/pyhusk/docs/agents/agent-skills/)
 
 ## License
 

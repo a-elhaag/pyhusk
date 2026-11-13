@@ -1,45 +1,51 @@
 site_name: pyhusk
-site_description: Architecture linting, selective CI testing, and minimal Docker slicing for FastAPI monorepos
+site_description: Minimal Docker images for FastAPI monorepos, rebuilt only when they change.
 site_url: https://a-elhaag.github.io/pyhusk/docs/
 repo_url: https://github.com/a-elhaag/pyhusk
 repo_name: a-elhaag/pyhusk
+edit_uri: edit/master/docs_src/
 docs_dir: docs_src
 site_dir: site/docs
 
 theme:
   name: material
-  custom_dir: overrides
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  font:
+    text: Roboto
+    code: Roboto Mono
   palette:
     - scheme: default
-      primary: white
-      accent: indigo
       toggle:
-        icon: material/weather-night
+        icon: material/brightness-4
         name: Switch to dark mode
     - scheme: slate
-      primary: black
-      accent: indigo
       toggle:
-        icon: material/weather-sunny
+        icon: material/brightness-7
         name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
   features:
-    - navigation.instant
-    - navigation.tracking
     - navigation.sections
+    - navigation.path
     - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
     - content.code.copy
+    - content.action.edit
     - content.tabs.link
 
 extra_css:
-  - stylesheets/modern.css
-
-extra_javascript:
-  - javascripts/modern.js
+  - stylesheets/docs.css
 
 markdown_extensions:
   - admonition
-  - tables
   - attr_list
+  - tables
+  - toc:
+      permalink: false
   - pymdownx.superfences
   - pymdownx.highlight:
       anchor_linenums: true
@@ -49,12 +55,17 @@ markdown_extensions:
 
 nav:
   - Overview: index.md
-  - Quickstart: quickstart.md
-  - Architecture Linting: linting.md
-  - Selective CI Testing: selective-testing.md
-  - Import Lineage & Bloat: import-lineage.md
-  - Docker Slicing & Verify: docker-slicing.md
-  - Benchmarks & ROI: benchmarks.md
-  - Configuration: configuration.md
-  - CLI Reference: commands.md
-  - AI Agent Skills: agent-skills.md
+  - Get started:
+      - Install: get-started/install.md
+      - Quickstart: get-started/quickstart.md
+  - Guides:
+      - Build and verify images: guides/building.md
+      - Lint architecture: guides/linting.md
+      - Run affected tests: guides/selective-testing.md
+      - Trace imports and dead code: guides/import-lineage.md
+      - Measure the savings: guides/benchmarks.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - Commands: reference/commands.md
+  - Agents:
+      - Agent skills: agents/agent-skills.md
