@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pyhusk — Minimal Docker images for FastAPI monorepos</title>
+<meta name="description" content="pyhusk discovers each service's routes, ships only the code they reach, and rebuilds only the services that changed.">
+<link rel="icon" type="image/svg+xml" href="docs/assets/logo.svg">
+<style>
+  :root {
+    --paper: #ffffff;
+    --wash: #f4f1ea;
+    --ink: #17221d;
+    --muted: #4d5b53;
+    --line: #e2ddd0;
+    --green: #0b6e4f;
+    --green-deep: #084f39;
+    --ochre: #b7791f;
+    --code-bg: #101815;
+    --code-fg: #e9f2ec;
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  /* Header */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(6px);
+  }
+  .site-inner {
+    display: flex; align-items: center; gap: 26px;
+    height: 64px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+  .brand svg { display: block; }
+  .brand b { font-family: var(--mono); font-size: 18px; letter-spacing: -0.02em; }
+  .brand small {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 20px; padding: 1px 9px;
+    background: var(--wash);
+  }
+  nav.site-nav { margin-left: auto; display: flex; align-items: center; gap: 22px; }
+  nav.site-nav a.link { color: var(--muted); text-decoration: none; font-size: 15px; }
+  nav.site-nav a.link:hover { color: var(--ink); }
+  .star-btn { display: inline-flex; line-height: 0; }
+  @media (max-width: 720px) {
+    nav.site-nav a.link { display: none; }
+    nav.site-nav { margin-left: auto; }
+  }
+
+  /* Hero */
+  .hero { padding: 72px 0 56px; }
+  .hero-grid {
+    display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px;
+    align-items: start;
+  }
+  @media (max-width: 920px) { .hero-grid { grid-template-columns: 1fr; } }
+  .kicker {
+    font-family: var(--mono); font-size: 13px; color: var(--green-deep);
+    text-transform: uppercase; letter-spacing: 0.14em;
+    margin: 0 0 18px;
+  }
+  h1.display {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(42px, 5.4vw, 62px);
+    line-height: 1.08; letter-spacing: -0.015em;
+    margin: 0 0 22px;
+  }
+  h1.display em { font-style: italic; color: var(--green-deep); }
+  .lede { font-size: 19px; color: var(--muted); margin: 0 0 30px; max-width: 34rem; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 34px; }
+  .btn {
+    display: inline-block; text-decoration: none; font-weight: 600; font-size: 16px;
+    border-radius: 10px; padding: 12px 22px;
+  }
+  .btn-primary { background: var(--green); color: #fff; }
+  .btn-primary:hover { background: var(--green-deep); }
+  .btn-ghost { border: 1px solid var(--line); color: var(--ink); background: var(--paper); }
+  .btn-ghost:hover { border-color: var(--ink); }
+
+  .install-card {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--wash);
+    overflow: hidden;
+  }
+  .install-card ol { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .install-card li {
+    display: flex; gap: 14px; align-items: baseline;
+    padding: 13px 18px;
+    border-top: 1px solid var(--line);
+    font-size: 15px;
+  }
+  .install-card li:first-child { border-top: none; }
+  .install-card li::before {
+    counter-increment: step; content: counter(step);
+    font-family: var(--mono); font-size: 12px; color: var(--paper);
+    background: var(--ink); border-radius: 50%;
+    min-width: 22px; height: 22px; line-height: 22px; text-align: center;
+  }
+  .install-card code {
+    font-family: var(--mono); font-size: 14.5px; color: var(--ink);
+    overflow-x: auto; white-space: nowrap;
+  }
+  .install-card .note { color: var(--muted); font-size: 13.5px; display: block; }
+
+  /* Terminal + figure */
+  figure.demo { margin: 0; }
+  .terminal {
+    background: var(--code-bg); color: var(--code-fg);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 24px 60px -28px rgba(16,24,21,0.45);
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.09);
+  }
+  .term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a4a43; }
+  .term-bar i:first-child { background: #c96f4a; }
+  .term-bar i:nth-child(2) { background: var(--ochre); }
+  .term-bar i:nth-child(3) { background: #3f8f68; }
+  .term-bar span { margin-left: auto; font-family: var(--mono); font-size: 12px; color: #8fa39a; }
+  .terminal pre {
+    margin: 0; padding: 18px 20px 20px;
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.75;
+    overflow-x: auto;
+  }
+  .terminal .p { color: #8fa39a; }
+  .terminal .c { color: #ffd98a; }
+  .terminal .ok { color: #7fd6a8; }
+  .terminal .dim { color: #8fa39a; }
+  figure.demo figcaption {
+    margin-top: 12px; font-size: 13.5px; color: var(--muted);
+  }
+
+  .peel { margin-top: 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+  .peel svg { display: block; width: 100%; height: auto; }
+  .peel figcaption {
+    padding: 10px 18px 14px; margin: 0;
+    font-size: 13.5px; color: var(--muted);
+    border-top: 1px dashed var(--line);
+  }
+  .peel figcaption strong { color: var(--ink); }
+
+  /* Sections */
+  section.band { padding: 60px 0; border-top: 1px solid var(--line); }
+  section.band.wash { background: var(--wash); border-top: none; }
+  .section-head { max-width: 40rem; margin-bottom: 36px; }
+  .section-head h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(30px, 3.4vw, 40px); letter-spacing: -0.01em;
+    margin: 0 0 12px; line-height: 1.15;
+  }
+  .section-head p { margin: 0; color: var(--muted); font-size: 18px; }
+
+  /* How it works: numbered editorial rows */
+  .steps { margin: 0; padding: 0; list-style: none; }
+  .steps li {
+    display: grid; grid-template-columns: 64px 1fr 1fr; gap: 24px;
+    padding: 28px 0; border-top: 1px solid var(--line);
+    align-items: baseline;
+  }
+  .steps li:last-child { border-bottom: 1px solid var(--line); }
+  .steps .n {
+    font-family: var(--serif); font-style: italic;
+    font-size: 34px; color: var(--ochre); line-height: 1;
+  }
+  .steps h3 { margin: 0 0 8px; font-size: 19px; letter-spacing: -0.01em; }
+  .steps p { margin: 0; color: var(--muted); font-size: 16px; }
+  .steps .mono {
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; white-space: pre;
+  }
+  @media (max-width: 920px) { .steps li { grid-template-columns: 48px 1fr; } .steps .mono { grid-column: 2; } }
+
+  /* Benchmark table */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+  table.figures { width: 100%; border-collapse: collapse; font-size: 15.5px; min-width: 640px; }
+  table.figures th, table.figures td { padding: 14px 18px; text-align: left; }
+  table.figures thead th {
+    font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); border-bottom: 1px solid var(--line); font-weight: 600;
+  }
+  table.figures tbody tr + tr { border-top: 1px solid var(--line); }
+  table.figures td.save { color: var(--green-deep); font-weight: 600; }
+  table.figures code { font-family: var(--mono); font-size: 14px; }
+  .fineprint { font-size: 14px; color: var(--muted); margin: 14px 2px 0; }
+  .fineprint a { color: var(--green-deep); }
+
+  /* Command atlas: two-column definition list */
+  .atlas {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px;
+    border-top: 1px solid var(--line);
+  }
+  .atlas div { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .atlas dt {
+    font-family: var(--mono); font-size: 15px; font-weight: 700; margin-bottom: 4px;
+  }
+  .atlas dd { margin: 0; color: var(--muted); font-size: 15.5px; }
+  @media (max-width: 720px) { .atlas { grid-template-columns: 1fr; } }
+
+  /* Honest limits */
+  .limits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  @media (max-width: 820px) { .limits { grid-template-columns: 1fr; } }
+  .limits article { border-left: 2px solid var(--ochre); padding-left: 18px; }
+  .limits h3 { margin: 0 0 6px; font-size: 17px; }
+  .limits p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+  /* Closing band */
+  .closing { text-align: left; }
+  .closing h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(30px, 3.6vw, 44px); letter-spacing: -0.01em;
+    margin: 0 0 14px; line-height: 1.15;
+  }
+  .closing p { color: var(--muted); font-size: 18px; max-width: 36rem; margin: 0 0 26px; }
+  .copy-line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .copy-box {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--code-bg); color: var(--code-fg);
+    font-family: var(--mono); font-size: 15px;
+    border-radius: 10px; padding: 12px 8px 12px 18px;
+  }
+  .copy-box button {
+    font: inherit; font-size: 13px; cursor: pointer;
+    background: rgba(255,255,255,0.12); color: var(--code-fg);
+    border: 1px solid rgba(255,255,255,0.18); border-radius: 7px;
+    padding: 6px 12px; margin-right: 6px;
+  }
+  .copy-box button:hover { background: rgba(255,255,255,0.22); }
+  .copy-hint { font-size: 13.5px; color: var(--muted); min-height: 1.4em; }
+
+  footer.site {
+    border-top: 1px solid var(--line); padding: 34px 0 44px; margin-top: 20px;
+    color: var(--muted); font-size: 14.5px;
+  }
+  footer.site .wrap { display: flex; gap: 22px; flex-wrap: wrap; align-items: baseline; }
+  footer.site a { color: var(--muted); text-decoration: none; }
+  footer.site a:hover { color: var(--ink); }
+  footer.site .spacer { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap site-inner">
+    <a class="brand" href="#" aria-label="pyhusk home">
+      <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="4" y="4" width="56" height="56" rx="14" fill="#0b6e4f"/>
+        <path d="M16 24 L32 16 L48 24 L32 32 Z" fill="#ffffff" opacity="0.55"/>
+        <path d="M16 33 L32 25 L48 33 L32 41 Z" fill="#ffffff" opacity="0.8"/>
+        <path d="M16 42 L32 34 L48 42 L32 50 Z" fill="#ffffff"/>
+        <circle cx="32" cy="42" r="3.2" fill="#0b6e4f"/>
+      </svg>
+      <b>pyhusk</b>
+      <small>v0.2.0</small>
+    </a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="link" href="docs/">Docs</a>
+      <a class="link" href="docs/reference/commands/">Commands</a>
+      <a class="link" href="docs/guides/benchmarks/">Benchmarks</a>
+      <a class="star-btn" href="https://github.com/a-elhaag/pyhusk" aria-label="Star pyhusk on GitHub">
+        <img src="https://img.shields.io/github/stars/a-elhaag/pyhusk?style=social" alt="GitHub stars" width="88" height="20">
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div class="hero-grid">
+      <div>
+        <p class="kicker">For FastAPI monorepos</p>
+        <h1 class="display">Ship the kernel.<br><em>Leave the husk behind.</em></h1>
+        <p class="lede">pyhusk discovers each service&rsquo;s routes by importing its app,
+          follows the imports and <strong>Depends()</strong> chains those routes reach,
+          and builds an image containing <strong>that slice and nothing else</strong>.
+          Then it remembers what went into each image, so you rebuild only the
+          services that changed.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="docs/get-started/quickstart/">Get started</a>
+          <a class="btn btn-ghost" href="https://github.com/a-elhaag/pyhusk">View on GitHub</a>
+        </div>
+        <div class="install-card" aria-label="Installation steps">
+          <ol>
+            <li><span><code>uv tool install pyhusk</code><span class="note">Python 3.12+, isolated from your repo</span></span></li>
+            <li><span><code>cd your-monorepo &amp;&amp; pyhusk init</code><span class="note">Writes pyhusk.yaml from detected services</span></span></li>
+            <li><span><code>pyhusk build</code><span class="note">Builds every stale service, verifies each image</span></span></li>
+          </ol>
+        </div>
+      </div>
+      <div>
+        <figure class="demo">
+          <div class="terminal" role="img" aria-label="Example pyhusk build session">
+            <div class="term-bar"><i></i><i></i><i></i><span>monorepo — zsh</span></div>
+<pre><span class="p">$</span> <span class="c">pyhusk build</span>
+billing: building
+billing: built billing:latest  34/210 files  12 packages
+checkout: unchanged
+<span class="p">$</span> <span class="c">pyhusk build</span>
+<span class="dim">billing: unchanged</span>
+<span class="dim">checkout: unchanged</span>
+<span class="p">$</span> <span class="c">pyhusk build billing --compare</span>
+<span class="ok">billing: pruned 121 MB vs naive 798 MB  saved 677 MB (85%)</span></pre>
+          </div>
+          <figcaption>Example session. The second run rebuilds nothing &mdash; every
+            image still matches its stamped slice hash.</figcaption>
+        </figure>
+        <figure class="peel">
+          <svg viewBox="0 0 480 168" role="img" aria-label="Diagram: a 210-file repository peeled down to a 34-file slice">
+            <g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">
+              <rect x="16" y="28" width="200" height="112" rx="10" fill="#f4f1ea" stroke="#e2ddd0"/>
+              <text x="32" y="56" fill="#4d5b53">your monorepo</text>
+              <text x="32" y="78" fill="#17221d" font-size="22" font-weight="bold">210 files</text>
+              <text x="32" y="100" fill="#4d5b53">46 packages</text>
+              <text x="32" y="122" fill="#4d5b53">798 MB image</text>
+              <g stroke="#b7791f" stroke-width="1.6" stroke-dasharray="5 4" fill="none">
+                <path d="M232 84 L262 84"/>
+              </g>
+              <path d="M258 78 L268 84 L258 90" fill="none" stroke="#b7791f" stroke-width="1.6"/>
+              <rect x="278" y="28" width="186" height="112" rx="10" fill="#0b6e4f"/>
+              <text x="294" y="56" fill="#cfe6da">billing slice</text>
+              <text x="294" y="78" fill="#ffffff" font-size="22" font-weight="bold">34 files</text>
+              <text x="294" y="100" fill="#cfe6da">12 packages</text>
+              <text x="294" y="122" fill="#cfe6da">121 MB image</text>
+            </g>
+          </svg>
+          <figcaption><strong>What pruning looks like.</strong> Routes in, slice out;
+            everything unreached stays home. Illustrative figures.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+
+  <section class="band" aria-labelledby="how">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="how">How it works</h2>
+        <p>Four stages, each one feeding the next. No configuration to tune,
+          no annotations to add &mdash; the app itself is the specification.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="n" aria-hidden="true">1</span>
+          <div>
+            <h3>Probe the living app</h3>
+            <p>pyhusk imports each service in a subprocess and walks its routes,
+              recording every endpoint and every callable in each route&rsquo;s
+              dependency tree &mdash; exact, not guessed.</p>
+          </div>
+          <div class="mono">app.routes &rarr; endpoints + Depends() tree
+entry module always included</div>
+        </li>
+        <li>
+          <span class="n" aria-hidden="true">2</span>
+          <div>
+            <h3>Slice what the routes reach</h3>
+            <p>An AST pass follows local imports from those seeds and pins
+              third-party packages from your lock file, transitively closed.
+              Unparseable files are kept with a warning, never dropped.</p>
+          </div>
+          <div class="mono">seeds &rarr; local files + third-party pins
+uvicorn added (apps never import it)</div>
+        </li>
+        <li>
+          <span class="n" aria-hidden="true">3</span>
+          <div>
+            <h3>Hash everything, stamp the image</h3>
+            <p>File contents, requirements, Dockerfile, and base-image digest are
+              hashed and stamped onto the image as a label &mdash; so staleness
+              survives fresh CI runners with empty caches.</p>
+          </div>
+          <div class="mono">org.pyhusk.slice = sha256(files + reqs +
+  dockerfile + base digest)</div>
+        </li>
+        <li>
+          <span class="n" aria-hidden="true">4</span>
+          <div>
+            <h3>Boot it before you trust it</h3>
+            <p>Each fresh image is started and its OpenAPI schema compared
+              against the probed routes. Failures are untagged and removed;
+              a missing file becomes a build error, not an outage.</p>
+          </div>
+          <div class="mono">schema &rarr; healthcheck &rarr; boot
+failed image? removed, build retried</div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band wash" aria-labelledby="figures">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="figures">Measure it on your repo, not ours</h2>
+        <p><code>pyhusk benchmark</code> builds each service twice &mdash; pruned and
+          whole-repo &mdash; and reports the delta. The numbers below are example
+          output showing the shape of the report.</p>
+      </div>
+      <div class="table-scroll">
+        <table class="figures">
+          <thead>
+            <tr><th>Service</th><th>Build time</th><th>Time saved</th><th>Compressed size</th><th>Size saved</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>billing</code></td><td>8.4s vs 39.1s</td><td class="save">-79%</td><td>121 MB vs 798 MB</td><td class="save">-85%</td></tr>
+            <tr><td><code>checkout</code></td><td>11.2s vs 40.6s</td><td class="save">-72%</td><td>164 MB vs 798 MB</td><td class="save">-79%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fineprint">Example output. Your savings depend on how much of the
+        monorepo each service actually imports &mdash; run
+        <a href="docs/guides/benchmarks/">the benchmark</a> to find out.</p>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="commands">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="commands">One slice, thirteen commands</h2>
+        <p>The same import graph powers builds, linting, selective tests, and
+          archaeology. <a href="docs/reference/commands/" style="color: var(--green-deep);">Full reference &rarr;</a></p>
+      </div>
+      <dl class="atlas">
+        <div><dt>build</dt><dd>Minimal images for stale services, verified by booting each one.</dd></div>
+        <div><dt>plan</dt><dd>Which services are stale, as text or JSON for CI matrices.</dd></div>
+        <div><dt>lint</dt><dd>Service boundaries, forbidden imports, cycles, plus ruff on shipped code.</dd></div>
+        <div><dt>test</dt><dd>Run only the tests whose import slice touches the git diff.</dd></div>
+        <div><dt>affected</dt><dd>Preview which services and tests a diff touches.</dd></div>
+        <div><dt>why</dt><dd>Shortest import path from a service to any file or package.</dd></div>
+        <div><dt>unused</dt><dd>Python files no service reaches. Candidates for deletion.</dd></div>
+        <div><dt>log</dt><dd>Commit history behind a service&rsquo;s current slice.</dd></div>
+        <div><dt>benchmark</dt><dd>Pruned vs whole-repo build time and size, honestly measured.</dd></div>
+        <div><dt>init &middot; list &middot; skill &middot; build-bases</dt><dd>Set up a repo, see its services, teach your agents, prebuild shared bases.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="limits">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="limits">Honest limits</h2>
+        <p>What pyhusk assumes today. If these don&rsquo;t describe your setup,
+          it will tell you loudly rather than guess.</p>
+      </div>
+      <div class="limits">
+        <article>
+          <h3>uv monorepos</h3>
+          <p>Pins come from <code>uv.lock</code> and apps run from the repo&rsquo;s own
+            <code>.venv</code>. Other layouts are not supported yet.</p>
+        </article>
+        <article>
+          <h3>FastAPI-first</h3>
+          <p>Route discovery imports FastAPI/Starlette apps. Workers and jobs
+            slice from the entry file with no route awareness.</p>
+        </article>
+        <article>
+          <h3>Docker builds images</h3>
+          <p>Only <code>build</code>, <code>benchmark</code>, and
+            <code>--compare</code> need a daemon. Lint, test, and tracing run anywhere.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band wash closing" aria-labelledby="start">
+    <div class="wrap">
+      <h2 id="start">One command to start.</h2>
+      <p>Install the tool, point it at your monorepo, and see what your
+        services actually need. Apache 2.0 licensed, on PyPI now.</p>
+      <div class="copy-line">
+        <span class="copy-box"><span id="install-cmd">uv tool install pyhusk</span><button id="copy-btn" type="button">Copy</button></span>
+        <span class="copy-hint" id="copy-hint" role="status"></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span><strong>pyhusk</strong> &mdash; minimal Docker images for FastAPI monorepos.</span>
+    <span class="spacer"></span>
+    <a href="docs/">Docs</a>
+    <a href="docs/get-started/quickstart/">Quickstart</a>
+    <a href="https://pypi.org/project/pyhusk/">PyPI</a>
+    <a href="https://github.com/a-elhaag/pyhusk">GitHub</a>
+    <span>Apache 2.0</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var btn = document.getElementById('copy-btn');
+    var hint = document.getElementById('copy-hint');
+    var cmd = document.getElementById('install-cmd').textContent;
+    btn.addEventListener('click', function () {
+      function done(ok) {
+        hint.textContent = ok ? 'Copied to clipboard.' : 'Copy failed — select the text manually.';
+        btn.textContent = ok ? 'Copied' : 'Copy';
+        setTimeout(function () { btn.textContent = 'Copy'; hint.textContent = ''; }, 2500);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(function () { done(true); }, function () { done(false); });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = cmd;
+        document.body.appendChild(ta);
+        ta.select();
+        try { done(document.execCommand('copy')); } catch (e) { done(false); }
+        document.body.removeChild(ta);
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

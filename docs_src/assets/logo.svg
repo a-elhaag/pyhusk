@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="pyhusk logo">
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#0b6e4f"/>
+  <!-- Three stacked layers being peeled back to a core: the pruned slice. -->
+  <path d="M16 24 L32 16 L48 24 L32 32 Z" fill="#ffffff" opacity="0.55"/>
+  <path d="M16 33 L32 25 L48 33 L32 41 Z" fill="#ffffff" opacity="0.8"/>
+  <path d="M16 42 L32 34 L48 42 L32 50 Z" fill="#ffffff"/>
+  <circle cx="32" cy="42" r="3.2" fill="#0b6e4f"/>
+</svg>

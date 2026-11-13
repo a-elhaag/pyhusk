@@ -1,0 +1,84 @@
+/* pyhusk docs: Google-Cloud-inspired layer over Material.
+   Left nav, centred article column, right table of contents. */
+
+:root {
+  --pyhusk-ink: #1a2733;
+  --pyhusk-accent: #0b6e4f;
+  --pyhusk-accent-soft: #e6f2ec;
+  --pyhusk-border: #dadce0;
+  --pyhusk-code-bg: #f6f8f7;
+}
+
+[data-md-color-scheme="slate"] {
+  --pyhusk-ink: #e8eaed;
+  --pyhusk-accent: #5fbf9f;
+  --pyhusk-accent-soft: #1d3229;
+  --pyhusk-border: #3c4043;
+  --pyhusk-code-bg: #202124;
+}
+
+/* Centred article column with comfortable measure. */
+.md-content__inner {
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+/* Body type: calm, left-aligned, generous line height. */
+.md-typeset {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--pyhusk-ink);
+}
+
+.md-typeset h1 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 1rem;
+}
+
+.md-typeset h2 {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  border-bottom: 1px solid var(--pyhusk-border);
+  padding-bottom: 0.35rem;
+  margin-top: 2.2rem;
+}
+
+/* Links and active nav in the accent green. */
+.md-typeset a {
+  color: var(--pyhusk-accent);
+}
+
+.md-nav__link--active {
+  color: var(--pyhusk-accent);
+  font-weight: 600;
+}
+
+/* Code blocks: flat, bordered, no glow. */
+.md-typeset pre > code {
+  background: var(--pyhusk-code-bg);
+  border: 1px solid var(--pyhusk-border);
+  border-radius: 8px;
+}
+
+.md-typeset code {
+  border-radius: 4px;
+}
+
+/* Tables: single hairlines, quiet header. */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--pyhusk-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--pyhusk-code-bg);
+  font-weight: 600;
+}
+
+/* Admonitions inherit the accent for notes. */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: var(--pyhusk-accent);
+}

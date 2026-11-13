@@ -12,8 +12,6 @@ module rebuilds only the services that use it.
 
 **[Landing page](https://a-elhaag.github.io/pyhusk/) · [Full docs](https://a-elhaag.github.io/pyhusk/docs/)**
 
-![pyhusk building two services, then reporting both unchanged on the second run](https://raw.githubusercontent.com/a-elhaag/pyhusk/master/site/demo.gif)
-
 ## Requirements
 
 - Python 3.12 or newer
